@@ -489,44 +489,89 @@ textarea::placeholder { color: var(--muted); opacity: .75; }
   $("histBtn").addEventListener("click", () => toggleView("hist"));
   $("savedBtn").addEventListener("click", () => toggleView("saved"));
 
-  // koeren met WebAudio: sinus met lage tremolo en een dalende toonhoogte per lettergreep
-  let ctx;
-  function coo(t0, dur, f0, f1, loud) {
-    const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(), filt = ctx.createBiquadFilter();
-    o.type = "sine"; filt.type = "lowpass"; filt.frequency.value = 900;
-    o.frequency.setValueAtTime(f0, t0);
-    o.frequency.linearRampToValueAtTime(f0 * 1.08, t0 + dur * 0.3);
-    o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
-    lfo.frequency.value = 28; lg.gain.value = 0.35;
-    lfo.connect(lg); lg.connect(g.gain);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.5 * loud, t0 + 0.04);
-    g.gain.setValueAtTime(0.45 * loud, t0 + dur * 0.7);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(filt); filt.connect(g); g.connect(ctx.destination);
-    o.start(t0); lfo.start(t0); o.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+  // Koeren: we rekenen zelf de samples uit en spelen ze af als WAV via een <audio>-element.
+  // Dat werkt op iPhone ook als de telefoon op stil staat (Web Audio wordt dan gedempt).
+  // Boventonen zorgen dat het ook uit kleine telefoonspeakers hoorbaar is.
+  const SR = 22050;
+  function synth(syllables, base, loud) {
+    const parts = [];
+    let total = 0;
+    const push = (arr) => { parts.push(arr); total += arr.length; };
+    const silence = (sec) => push(new Float32Array(Math.round(sec * SR)));
+    function coo(dur, f0, f1, amp) {
+      const n = Math.round(dur * SR), buf = new Float32Array(n);
+      let phase = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR, x = t / dur;
+        const f = x < 0.3 ? f0 * (1 + 0.08 * (x / 0.3)) : f0 * 1.08 * Math.pow(f1 / (f0 * 1.08), (x - 0.3) / 0.7);
+        phase += (2 * Math.PI * f) / SR;
+        const tone = Math.sin(phase) + 0.6 * Math.sin(2 * phase) + 0.35 * Math.sin(3 * phase) + 0.15 * Math.sin(4 * phase);
+        const trem = 0.7 + 0.3 * Math.sin(2 * Math.PI * 26 * t);
+        const env = Math.min(1, t / 0.035) * (x > 0.7 ? Math.pow(1 - (x - 0.7) / 0.3, 2) : 1);
+        buf[i] = Math.tanh(tone * trem * env * amp * 1.4) * 0.85;
+      }
+      push(buf);
+    }
+    syllables.forEach((s, i) => {
+      if (s === "pik") { coo(0.05, 1500, 1200, 0.5); silence(0.07); return; }
+      if (s.startsWith("rr")) { coo(0.28, base * 0.9, base * 0.8, loud); silence(0.04); return; }
+      const d = s === "koe" ? 0.42 : 0.26;
+      coo(d, base * (s === "koe" ? 1.12 : 1), base * 0.78, loud);
+      silence(i % 3 === 2 ? 0.28 : 0.06);
+    });
+    const out = new Float32Array(total);
+    let o = 0;
+    parts.forEach((p) => { out.set(p, o); o += p.length; });
+    return out;
   }
-  $("listen").addEventListener("click", async () => {
+  function toWav(samples) {
+    const buf = new ArrayBuffer(44 + samples.length * 2), v = new DataView(buf);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); str(8, "WAVE");
+    str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, "data"); v.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 32767, true);
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  let ctx, audioEl, audioUrl, stopTimer;
+  function stopAnim() { $("listen").classList.remove("playing"); document.body.classList.remove("bob"); }
+  function startAnim(sec) {
+    clearTimeout(stopTimer);
+    $("listen").classList.add("playing");
+    document.body.classList.add("bob");
+    stopTimer = setTimeout(stopAnim, sec * 1000 + 100);
+  }
+  function playWebAudio(samples) {
+    if (!ctx) return Promise.reject(new Error("geen AudioContext"));
+    const b = ctx.createBuffer(1, samples.length, SR);
+    b.getChannelData(0).set(samples);
+    const node = ctx.createBufferSource();
+    node.buffer = b; node.connect(ctx.destination);
+    return (ctx.state === "suspended" ? ctx.resume() : Promise.resolve()).then(() => node.start());
+  }
+
+  $("listen").addEventListener("click", () => {
     const pigeonText = dir === "nl2duif" ? current.out : src.value;
     const syllables = (pigeonText.toLowerCase().match(/roe|koe|hoe|oe|rr+|boe|pik/g) || []).slice(0, 40);
     if (!syllables.length) return toast("Niets om te koeren");
-    try {
-      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === "suspended") await ctx.resume();
-    } catch { return toast("Je browser laat geen geluid toe"); }
-    const base = dir !== "nl2duif" ? 270 : dialect === "hout" ? 330 : dialect === "post" ? 300 : 270;
-    const loud = /!!/.test(pigeonText) ? 1 : 0.8;
-    let t = ctx.currentTime + 0.05;
-    syllables.forEach((s, i) => {
-      if (s === "pik") { coo(t, 0.05, 1400, 1200, 0.25); t += 0.12; return; }
-      if (s.startsWith("rr")) { coo(t, 0.28, base * 0.9, base * 0.8, loud); t += 0.32; return; }
-      const d = s === "koe" ? 0.42 : 0.26;
-      coo(t, d, base * (s === "koe" ? 1.12 : 1), base * 0.78, loud);
-      t += d + (i % 3 === 2 ? 0.28 : 0.06);
-    });
-    $("listen").classList.add("playing");
-    document.body.classList.add("bob");
-    setTimeout(() => { $("listen").classList.remove("playing"); document.body.classList.remove("bob"); }, (t - ctx.currentTime) * 1000);
+    // AudioContext meteen binnen de tik aanmaken, zodat de terugval ook mag spelen
+    try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch {}
+    const base = dir !== "nl2duif" ? 380 : dialect === "hout" ? 440 : dialect === "post" ? 400 : 380;
+    const samples = synth(syllables, base, /!!/.test(pigeonText) ? 1 : 0.8);
+    const sec = samples.length / SR;
+
+    if (audioEl) { audioEl.pause(); }
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = URL.createObjectURL(toWav(samples));
+    audioEl = audioEl || new Audio();
+    audioEl.src = audioUrl;
+    const p = audioEl.play();
+    startAnim(sec);
+    Promise.resolve(p).catch(() =>
+      playWebAudio(samples).catch(() => { stopAnim(); toast("Je browser speelt geen geluid af. Staat je volume aan?"); })
+    );
   });
 
   setDir("nl2duif");
