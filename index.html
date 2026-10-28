@@ -1,0 +1,512 @@
+<title>Duif Vertaler</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Figtree:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one translator card on a pavement-grey ground, two panes side by side that stack on phones; pigeon-neck sheen as the only flourish. */
+:root {
+  --bg: #e9ecf1;          /* stoeptegel */
+  --surface: #ffffff;
+  --surface-2: #f4f6f9;
+  --fg: #23283a;          /* leisteen */
+  --muted: #646d82;       /* duivenvleugel */
+  --line: #d3d8e2;
+  --accent: #2b8a7e;      /* nekglans groen */
+  --accent-2: #8e4a86;    /* nekglans paars */
+  --crumb: #c4853a;       /* broodkorst */
+  --focus: #2b8a7e;
+  --font-display: "Bagel Fat One", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161a24; --surface: #1f2431; --surface-2: #262c3b; --fg: #e6e9f0; --muted: #9aa3b8;
+    --line: #343b4d; --accent: #5cc4b5; --accent-2: #c58ac0; --crumb: #e0a65e; --focus: #5cc4b5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161a24; --surface: #1f2431; --surface-2: #262c3b; --fg: #e6e9f0; --muted: #9aa3b8;
+  --line: #343b4d; --accent: #5cc4b5; --accent-2: #c58ac0; --crumb: #e0a65e; --focus: #5cc4b5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 40px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 22px; }
+
+header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.logo { width: 52px; height: 52px; flex: none; }
+h1 {
+  font-family: var(--font-display); font-weight: 400; font-size: clamp(30px, 5vw, 42px);
+  line-height: 1; margin: 0; letter-spacing: 0.01em;
+}
+h1 span {
+  background: linear-gradient(100deg, var(--accent) 10%, var(--accent-2) 70%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.tagline { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+  overflow: hidden; box-shadow: 0 1px 0 var(--line), 0 12px 32px -20px rgba(20, 30, 50, .35);
+}
+
+.langbar {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  border-bottom: 1px solid var(--line); padding: 6px 10px;
+}
+.lang { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; }
+.lang.right { justify-content: flex-start; padding-left: 18px; }
+.lang-name {
+  font-weight: 700; color: var(--accent); font-size: 15px;
+  border-bottom: 2px solid var(--accent); padding-bottom: 6px; margin-bottom: -7px; white-space: nowrap;
+}
+select {
+  font: inherit; font-size: 14px; color: var(--fg); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; min-width: 0; max-width: 100%;
+}
+.swap {
+  width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer; display: grid; place-items: center;
+  transition: transform .35s ease, background .2s;
+}
+.swap:hover { background: var(--surface-2); }
+.swap.spin { transform: rotate(180deg); }
+
+.panes { display: grid; grid-template-columns: 1fr 1fr; }
+.pane { min-width: 0; display: flex; flex-direction: column; padding: 18px 20px 14px; min-height: 250px; }
+.pane.out { background: var(--surface-2); border-left: 1px solid var(--line); }
+textarea {
+  font: inherit; font-size: 22px; line-height: 1.4; color: var(--fg); background: transparent;
+  border: 0; resize: none; outline: none; width: 100%; flex: 1; min-height: 150px; padding: 0;
+}
+textarea::placeholder { color: var(--muted); }
+.output { font-size: 22px; line-height: 1.4; flex: 1; min-height: 150px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.output .act { color: var(--accent-2); font-style: italic; }
+.output.empty { color: var(--muted); }
+.output.busy { opacity: .45; }
+
+.pane-foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.pane-foot .spacer { flex: 1; }
+.count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.icon-btn {
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); background: transparent;
+  border: 1px solid transparent; border-radius: 999px; padding: 6px 10px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--fg); border-color: var(--line); }
+.pane.out .icon-btn:hover { background: var(--surface); }
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn.playing { color: var(--accent); }
+
+.detect { font-size: 13px; color: var(--muted); margin: 0 0 8px; min-height: 20px; }
+.detect b { color: var(--fg); font-weight: 500; }
+.suggest { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+.suggest button {
+  font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer;
+  font-style: italic; text-decoration: underline; text-underline-offset: 3px;
+}
+
+.meta {
+  display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 20px; border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--muted); align-items: center;
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent); color: var(--accent-2); font-weight: 700;
+}
+.meter { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.meter i { display: block; width: 90px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.meter i::after { content: ""; display: block; height: 100%; width: var(--w, 50%); background: var(--crumb); transition: width .4s ease; }
+
+section h2 { font-family: var(--font-body); font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.examples { display: flex; flex-wrap: wrap; gap: 8px; }
+.examples button {
+  font: inherit; font-size: 14px; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 14px; cursor: pointer; transition: border-color .15s, transform .15s;
+}
+.examples button:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+.phrasebook { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+.phrase { padding: 12px 4px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; min-width: 0; }
+.phrase .nl { font-weight: 500; }
+.phrase .du { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+
+footer { color: var(--muted); font-size: 13px; text-align: center; }
+
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px);
+  background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 14px;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.logo .head { transform-origin: 36px 20px; }
+.bob .logo .head { animation: peck .32s ease-in-out 3; }
+@keyframes peck { 50% { transform: rotate(14deg) translateY(2px); } }
+
+@media (max-width: 680px) {
+  .panes { grid-template-columns: 1fr; }
+  .pane.out { border-left: 0; border-top: 1px solid var(--line); }
+  .pane { min-height: 190px; }
+  textarea, .output { font-size: 19px; min-height: 110px; }
+  .lang.right { padding-left: 8px; }
+  .lang { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="wrap" id="app">
+  <header>
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+      <ellipse cx="30" cy="40" rx="20" ry="13" fill="var(--muted)"/>
+      <path d="M14 38 C 4 34, 4 46, 12 48 Z" fill="var(--fg)" opacity=".7"/>
+      <path d="M20 36 Q 30 30 42 38 Q 32 44 20 36 Z" fill="var(--line)"/>
+      <g class="head">
+        <path d="M34 34 Q 33 22 40 18 Q 48 16 49 24 Q 48 32 44 38 Z" fill="var(--accent)"/>
+        <path d="M36 34 Q 38 28 46 30 Q 46 36 42 39 Z" fill="var(--accent-2)" opacity=".85"/>
+        <circle cx="42" cy="17" r="8" fill="var(--muted)"/>
+        <circle cx="44.5" cy="15.5" r="2" fill="var(--crumb)"/>
+        <circle cx="44.8" cy="15.4" r="1" fill="var(--fg)"/>
+        <path d="M49 17 L 56 19 L 49 20.5 Z" fill="var(--fg)"/>
+      </g>
+      <path d="M26 52 L 25 59 M 34 52 L 35 59" stroke="var(--crumb)" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>Duif <span>Vertaler</span></h1>
+      <p class="tagline">Eindelijk weten wat die duif op het station van je wil.</p>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="langbar">
+      <div class="lang"><span class="lang-name" id="srcName">Nederlands</span></div>
+      <button class="swap" id="swap" type="button" aria-label="Talen omwisselen" title="Talen omwisselen">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></svg>
+      </button>
+      <div class="lang right">
+        <span class="lang-name" id="dstName">Duifs</span>
+        <label class="sr" for="dialect" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Dialect</label>
+        <select id="dialect">
+          <option value="stad">Stadsduif</option>
+          <option value="post">Postduif (formeel)</option>
+          <option value="hout">Houtduif (platteland)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <p class="detect" id="detect"></p>
+        <textarea id="src" maxlength="5000" spellcheck="false" placeholder="Typ iets…">Hallo, heb je nog brood?</textarea>
+        <p class="suggest" id="suggest" hidden></p>
+        <div class="pane-foot">
+          <button class="icon-btn" id="clear" type="button" title="Wissen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Wissen
+          </button>
+          <span class="spacer"></span>
+          <span class="count" id="count">0 / 5000 kruimels</span>
+        </div>
+      </div>
+      <div class="pane out">
+        <p class="detect">&nbsp;</p>
+        <div class="output" id="out" aria-live="polite"></div>
+        <div class="pane-foot">
+          <button class="icon-btn" id="listen" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg><span>Beluisteren</span>
+          </button>
+          <span class="spacer"></span>
+          <button class="icon-btn" id="copy" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Kopiëren
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta">
+      <span>Stemming: <span class="chip" id="mood">Hongerig</span></span>
+      <span class="meter">Zekerheid <i id="confBar"></i> <span id="conf">0%</span></span>
+      <span id="note"></span>
+    </div>
+  </div>
+
+  <section>
+    <h2>Probeer eens</h2>
+    <div class="examples" id="examples"></div>
+  </section>
+
+  <section>
+    <h2>Zakwoordenboek Duifs</h2>
+    <div class="phrasebook" id="phrasebook"></div>
+  </section>
+
+  <footer>Vertalingen zijn niet goedgekeurd door de Koninklijke Nederlandse Bond van Postduivenhouders.</footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const src = $("src"), out = $("out"), dialectSel = $("dialect");
+  let dir = "nl2duif"; // or "duif2nl"
+
+  // FNV-1a: dezelfde invoer geeft altijd dezelfde vertaling
+  function hash(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  const pick = (arr, h) => arr[h % arr.length];
+
+  const DICT = {
+    brood: "RROEKOEKOE!!", broodje: "ROEKOE!! roekoe!!", boterham: "ROE-KOE-KOE!!",
+    kruimel: "koe-koe-koe", kruimels: "koe-koe-koe-koe-koe",
+    friet: "ROEKOE!!! *roept 47 vrienden*", patat: "ROEKOE!!! *roept 47 vrienden*", frietje: "ROEKOE!!! *roept 47 vrienden*",
+    kat: "*vliegt in paniek weg*", poes: "*vliegt in paniek weg*", hond: "*fladdert 40 cm opzij*",
+    meeuw: "grrrrr… *kijkt vuil*",
+    ja: "roe.", nee: "rrrrr.", misschien: "roe… koe?",
+    hallo: "roekoe~", hoi: "roekoe~", dag: "roekoe~", doei: "*vliegt weg zonder groeten*",
+    liefde: "*blaast nek op* roekoeroekoe", schat: "*blaast nek op* roekoe", lief: "*draait rondje* roekoe",
+    standbeeld: "*poept*", beeld: "*poept*", auto: "*loopt pas op het laatste moment weg*", fiets: "*loopt rustig verder*",
+    ik: "roe", jij: "koe?", je: "koe?", wij: "roe-roe", mijn: "ROE", eten: "pik-pik-pik", honger: "pik-pik-pik-pik?",
+    duif: "*knikt met hoofd*", duiven: "*knikt met hoofd* ×12", station: "*tript rond*", dak: "rrroe~",
+    sorry: "*kijkt weg*", dank: "roekoe.", bedankt: "roekoe.", alsjeblieft: "koe… koe?",
+  };
+  const SYL = {
+    stad: ["roe", "koe", "rroe", "koerr", "grrroe", "oe", "roekoe", "krr", "boe"],
+    post: ["Roe", "Koe", "Roekoe", "Oe", "Hoekoe", "Rroe"],
+    hout: ["hoe", "hoe-hoe", "roe-KOE", "koe-koe", "oe", "hoe-KOE"],
+  };
+
+  function nlToDuif(text, dialect) {
+    const parts = text.split(/(\s+|[.,!?;:]+)/).filter((p) => p !== "");
+    const res = parts.map((p) => {
+      if (/^\s+$/.test(p)) return p;
+      if (/^[.,!?;:]+$/.test(p)) {
+        if (p.includes("?")) return "?";
+        if (p.includes("!")) return "!! *fladder*";
+        return p;
+      }
+      const w = p.toLowerCase().replace(/[^a-zà-ÿ'-]/g, "");
+      if (!w) return p;
+      if (DICT[w]) return DICT[w];
+      const h = hash(w + dialect);
+      const n = Math.min(4, Math.max(1, Math.ceil(w.length / 3)));
+      const syl = [];
+      for (let i = 0; i < n; i++) syl.push(pick(SYL[dialect], hash(w + i + dialect)));
+      let s = syl.join(h % 3 === 0 ? "-" : "");
+      if (p[0] === p[0].toUpperCase() && /[A-Z]/.test(p[0])) s = s[0].toUpperCase() + s.slice(1);
+      return s;
+    });
+    let txt = res.join("").replace(/\s+([?!.,])/g, "$1").trim();
+    if (dialect === "post" && txt) txt = "Geachte duif,\n" + txt + "\nHoogachtend, roe.";
+    if (dialect === "hout" && txt) txt += " … roe-KOE-koe, roe-koe.";
+    return txt;
+  }
+
+  const NL_LINES = [
+    "Waar is het brood?", "Dit is mijn bankje.", "Ik heb niks gezien.", "Die meeuw deugt niet.",
+    "Heb je dat standbeeld gezien? Prachtig. Ik ga er even op zitten.", "Loop maar door, ik sta hier prima.",
+    "Kun je wat sneller eten? Er vallen te weinig kruimels.", "Ik ben niet bang voor je. Behalve als je beweegt.",
+    "Mijn neef woont op de Dam. Hij is erg belangrijk.", "Is dat een broodje kroket? Ik vraag het voor een vriend.",
+    "Ik loop gewoon even met mijn hoofd te knikken.", "Ik zat hier eerst.", "Wanneer gaat die trein? Ik ga niet mee hoor.",
+    "Kijk hoe glimmend mijn nek is.", "Ik woon onder het viaduct. Mooie buurt.", "Daar ligt iets. Het is vast eten.",
+    "Ik ga pas weg als je auto echt heel dichtbij is.", "Iemand heeft hier friet laten vallen. Vertel het niemand.",
+    "Ik heb een plan. Het gaat over brood.", "Rustig. Ik doe alleen een rondje.", "Mag ik op je balkon wonen?",
+    "Die man op het bankje heeft zaadjes. Ik voel het.", "Ik ben gisteren een stukje met de tram meegelopen.",
+    "Dit plein is van mij en van die andere 300.", "Jij hebt mooie schoenen. Ik ga er even naast lopen.",
+    "Ken je de weg naar Den Bosch? Ik moet een brief bezorgen.",
+  ];
+  const ACT_NL = {
+    poept: "(geeft een kunstkritiek)", "vliegt": "(heeft een afspraak)", "knikt": "(is het met je eens)",
+    "blaast": "(probeert indruk te maken)", "kijkt": "(oordeelt stil)", "fladder": "(is enthousiast)",
+  };
+
+  function duifToNl(text) {
+    const raw = text.trim();
+    if (!raw) return "";
+    const segs = raw.split(/(?<=[.!?…~])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+    const lines = segs.map((seg) => {
+      const action = seg.match(/\*([^*]+)\*/);
+      if (action) {
+        const verb = action[1].trim().split(/\s+/)[0].toLowerCase();
+        const key = Object.keys(ACT_NL).find((k) => verb.startsWith(k));
+        if (key && seg.replace(/\*[^*]+\*/g, "").trim() === "") return ACT_NL[key];
+      }
+      const clean = seg.replace(/\*[^*]+\*/g, "").toLowerCase();
+      let line = pick(NL_LINES, hash(clean.replace(/[^a-z]/g, "")));
+      const words = clean.split(/\s+/).filter(Boolean).length;
+      if (words > 4) line += " " + pick(NL_LINES, hash(clean + "#2"));
+      const bangs = (seg.match(/!/g) || []).length;
+      if (bangs >= 2 || /[A-Z]{4,}/.test(seg)) line = line.replace(/[.?]$/, "") + "!!!";
+      if (action) {
+        const verb = action[1].trim().split(/\s+/)[0].toLowerCase();
+        const key = Object.keys(ACT_NL).find((k) => verb.startsWith(k));
+        if (key) line += " " + ACT_NL[key];
+      }
+      return line;
+    });
+    return lines.join(" ");
+  }
+
+  const MOODS = ["Hongerig", "Territoriaal", "Verliefd", "Achterdochtig", "Verveeld", "Zelfvoldaan", "Heel erg hongerig"];
+  function looksLikePigeon(t) {
+    const words = t.toLowerCase().match(/[a-zà-ÿ]+/g) || [];
+    if (!words.length) return true;
+    const pig = words.filter((w) => /^(r*o*e*k*o*e*r*|h*o+e+|k*r+|g*r+o*e*|b*o+e+|pik)+$/.test(w) && /[oe]{2}|rr|pik/.test(w));
+    return pig.length / words.length > 0.6;
+  }
+
+  function render(html) {
+    // acties tussen *sterretjes* cursief tonen, rest escapen
+    const esc = html.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    return esc.replace(/\*([^*]+)\*/g, '<span class="act">*$1*</span>').replace(/(\((?:geeft|heeft|is|probeert|oordeelt)[^)]*\))/g, '<span class="act">$1</span>');
+  }
+
+  let timer;
+  function translate(instant) {
+    const text = src.value;
+    $("count").textContent = `${text.length} / 5000 kruimels`;
+    clearTimeout(timer);
+    out.classList.add("busy");
+    timer = setTimeout(() => {
+      out.classList.remove("busy");
+      const dialect = dialectSel.value;
+      let result = dir === "nl2duif" ? nlToDuif(text, dialect) : duifToNl(text);
+      out.classList.toggle("empty", !result);
+      out.innerHTML = result ? render(result) : "Vertaling";
+
+      const h = hash(text + dialect + dir);
+      const brood = /brood|kruimel|friet|patat|eten|honger|roekoe!!/i.test(text);
+      $("mood").textContent = !text.trim() ? "Onbekend" : brood ? "Heel erg hongerig" : /lief|schat|liefde|nek op/i.test(text) ? "Verliefd" : /kat|hond|meeuw/i.test(text) ? "Achterdochtig" : pick(MOODS, h);
+      const conf = text.trim() ? 61 + (h % 38) : 0;
+      $("conf").textContent = conf + "%";
+      $("confBar").style.setProperty("--w", conf + "%");
+
+      const detect = $("detect"), sug = $("suggest");
+      sug.hidden = true;
+      if (dir === "nl2duif") {
+        detect.innerHTML = text.trim() ? "Gedetecteerd: <b>Nederlands</b>" : "";
+        $("note").textContent = dialect === "post" ? "Geschikt voor afstanden tot 1000 km." : dialect === "hout" ? "Klinkt het best om 5 uur ’s ochtends." : "Te horen op elk treinstation.";
+      } else {
+        const ok = looksLikePigeon(text);
+        detect.innerHTML = text.trim() ? (ok ? "Gedetecteerd: <b>Duifs (" + pick(["Damrak", "Coolsingel", "Vredenburg", "Grote Markt", "Station Zwolle"], h) + "-dialect)</b>" : "Gedetecteerd: <b>Mens</b>") : "";
+        if (text.trim() && !ok) {
+          sug.hidden = false;
+          sug.innerHTML = 'Bedoelde u: <button type="button" id="sugBtn">roekoe roekoe?</button>';
+          $("sugBtn").onclick = () => { src.value = "roekoe roekoe?"; translate(true); };
+        }
+        $("note").textContent = "Duiven liegen gemiddeld 3× per dag.";
+      }
+    }, instant ? 0 : 280);
+  }
+
+  function setDir(d) {
+    dir = d;
+    $("srcName").textContent = d === "nl2duif" ? "Nederlands" : "Duifs";
+    $("dstName").textContent = d === "nl2duif" ? "Duifs" : "Nederlands";
+    dialectSel.hidden = d !== "nl2duif";
+    renderExamples();
+  }
+
+  $("swap").addEventListener("click", () => {
+    const btn = $("swap");
+    btn.classList.toggle("spin");
+    const translated = out.classList.contains("empty") ? "" : out.textContent;
+    setDir(dir === "nl2duif" ? "duif2nl" : "nl2duif");
+    src.value = translated;
+    translate(true);
+  });
+  src.addEventListener("input", () => translate(false));
+  dialectSel.addEventListener("change", () => translate(true));
+  $("clear").addEventListener("click", () => { src.value = ""; translate(true); src.focus(); });
+
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1600);
+  }
+  $("copy").addEventListener("click", async () => {
+    const text = out.classList.contains("empty") ? "" : out.textContent;
+    if (!text) return toast("Er is nog niets om te kopiëren");
+    try { await navigator.clipboard.writeText(text); toast("Gekopieerd"); }
+    catch {
+      const r = document.createRange(); r.selectNodeContents(out);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      toast("Tekst geselecteerd, kopieer met Ctrl+C");
+    }
+  });
+
+  // Koeren met WebAudio: sinus met lage tremolo en een dalende toonhoogte per lettergreep
+  let ctx;
+  function coo(t0, dur, f0, f1, loud) {
+    const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(), filt = ctx.createBiquadFilter();
+    o.type = "sine"; filt.type = "lowpass"; filt.frequency.value = 900;
+    o.frequency.setValueAtTime(f0, t0);
+    o.frequency.linearRampToValueAtTime(f0 * 1.08, t0 + dur * 0.3);
+    o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    lfo.frequency.value = 28; lg.gain.value = 0.35;
+    lfo.connect(lg); lg.connect(g.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.5 * loud, t0 + 0.04);
+    g.gain.setValueAtTime(0.45 * loud, t0 + dur * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(filt); filt.connect(g); g.connect(ctx.destination);
+    o.start(t0); lfo.start(t0); o.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+  }
+  $("listen").addEventListener("click", async () => {
+    const pigeonText = dir === "nl2duif" ? out.textContent : src.value;
+    const syllables = (pigeonText.toLowerCase().match(/roe|koe|hoe|oe|rr+|boe|pik/g) || []).slice(0, 40);
+    if (!syllables.length) return toast("Niets om te koeren");
+    try {
+      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === "suspended") await ctx.resume();
+    } catch { return toast("Je browser laat geen geluid toe"); }
+    const base = dialectSel.value === "hout" && dir === "nl2duif" ? 330 : dialectSel.value === "post" && dir === "nl2duif" ? 300 : 270;
+    let t = ctx.currentTime + 0.05;
+    syllables.forEach((s, i) => {
+      const loud = /!!/.test(pigeonText) ? 1 : 0.8;
+      if (s === "pik") { coo(t, 0.05, 1400, 1200, 0.25); t += 0.12; return; }
+      if (s.startsWith("rr")) { coo(t, 0.28, base * 0.9, base * 0.8, loud); t += 0.32; return; }
+      const up = s === "koe" ? 1.12 : 1;
+      const d = s === "koe" ? 0.42 : 0.26;
+      coo(t, d, base * up, base * 0.78, loud);
+      t += d + (i % 3 === 2 ? 0.28 : 0.06);
+    });
+    const btn = $("listen"); btn.classList.add("playing");
+    document.body.classList.add("bob");
+    setTimeout(() => { btn.classList.remove("playing"); document.body.classList.remove("bob"); }, (t - ctx.currentTime) * 1000);
+  });
+
+  const EX_NL = ["Hallo, heb je nog brood?", "Ik hou van je, schat!", "Pas op, een kat!", "Dit standbeeld is van mij.", "Wie wil er friet?", "Sorry, ik zat hier eerst."];
+  const EX_DU = ["Roekoe roekoe.", "RROEKOEKOE!!", "koe-koe-koe? *blaast nek op*", "grrroe koerr. Rroe!", "*poept*", "roe-KOE-koe, roe-koe."];
+  function renderExamples() {
+    const box = $("examples"); box.innerHTML = "";
+    (dir === "nl2duif" ? EX_NL : EX_DU).forEach((ex) => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = ex;
+      b.onclick = () => { src.value = ex; translate(true); };
+      box.appendChild(b);
+    });
+  }
+
+  const PHRASES = [
+    ["Hallo", "roekoe~"], ["Brood!", "RROEKOEKOE!!"], ["Ja / Nee", "roe. / rrrrr."], ["Ik hou van je", "*blaast nek op* roekoeroekoe"],
+    ["Daar is een kat", "*vliegt in paniek weg*"], ["Mooi standbeeld", "*poept*"], ["Waar is de friet?", "ROEKOE!!! *roept 47 vrienden*"], ["Tot ziens", "*vliegt weg zonder groeten*"],
+  ];
+  $("phrasebook").innerHTML = PHRASES.map(([nl, du]) => `<div class="phrase"><span class="nl">${nl}</span><span class="du">${du}</span></div>`).join("");
+
+  setDir("nl2duif");
+  translate(true);
+})();
+</script>
